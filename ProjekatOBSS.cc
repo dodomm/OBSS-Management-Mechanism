@@ -14,26 +14,25 @@
  * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
  */
 
-// Mrezna topologija:
+// Network topology:
 //
 //
 //         ------ n2 --- n3----
 //      n0|                     |n1
 //
-// Topologija u odredjenom vremenskom trenutku prelazi u
+// Network topology after some time interval
 //
 //       -------- n2 --- n3----
 //       |         |
 //      n0--------n1
 //
-// - Svi linkovi su wireless IEEE 802.11b sa OSLR routing protokolom
-// - n0 i n1 su u prvoj iteraciji izvan opsega
-// - n1 se kreće desno i lijevo
+// - All links are wireless IEEE 802.11b with OSLR routing protocol
+// - n0 and n1 are out of range in first iteration
+// - n1 is moving left and right
 
-// Za vizualizaciju preko netanim je ukljucujemo ovu biblioteku:
+// For virtualization:
 #include "ns3/netanim-module.h"
 
-// Ukljucivanje potrebnih biblioteka:
 #include "ns3/core-module.h"
 #include "ns3/network-module.h"
 #include "ns3/internet-module.h"
@@ -79,13 +78,13 @@ int main (int argc, char *argv[])
   cmd.Parse (argc, argv);
 
 //
-// Eksplicitno kreiramo 4 cvora koja su prikazana u topologiji
+// Create 4 nodes
 //
   NS_LOG_INFO ("Create nodes.");
   NodeContainer c;
   c.Create(4);
 
-  // Konfigurisemo wifi konekciju
+  // Configure wifi connection
   WifiHelper wifi;
 
   YansWifiPhyHelper wifiPhy =  YansWifiPhyHelper::Default ();
@@ -97,7 +96,7 @@ int main (int argc, char *argv[])
 	  	  	  	  	  	  	  	    "SystemLoss", DoubleValue(1),
 		  	  	  	  	  	  	    "HeightAboveZ", DoubleValue(1.5));
 
-  // Postavljamo vrijednosti parametara propagacije (opseg oko 250 metara)
+  // Set propagation parameters (250m range)
   wifiPhy.Set ("TxPowerStart", DoubleValue(33));
   wifiPhy.Set ("TxPowerEnd", DoubleValue(33));
   wifiPhy.Set ("TxPowerLevels", UintegerValue(1));
@@ -106,14 +105,14 @@ int main (int argc, char *argv[])
   wifiPhy.Set ("EnergyDetectionThreshold", DoubleValue(-61.8));
   wifiPhy.Set ("CcaMode1Threshold", DoubleValue(-64.8));
  
-// Kreiramo wifi kanal sa gore navedenim parametrima
+// Create Wifi channel
   wifiPhy.SetChannel (wifiChannel.Create ());
 
-  // Postavljamo Ad-Hoc WIFI MAC
+  // Set Ad-Hoc WIFI MAC
   NqosWifiMacHelper wifiMac = NqosWifiMacHelper::Default ();
   wifiMac.SetType ("ns3::AdhocWifiMac");
 
-  // Konfigurisemo 802.11b standard (Kao zamjena za 802.11e standard koji jos uvijek nije implementiran) 
+  // Configure 802.11b standard
   wifi.SetStandard (WIFI_PHY_STANDARD_80211b);
 
   wifi.SetRemoteStationManager ("ns3::ConstantRateWifiManager",
@@ -125,19 +124,19 @@ int main (int argc, char *argv[])
   devices = wifi.Install (wifiPhy, wifiMac, c);
 
 
-//  Omogucavamo koristenje OLSR protokola
+//  Enable OLSR protocol
   OlsrHelper olsr;
 
-  // Instaliramo routing protocol
+  // Installation of routing protocol
   Ipv4ListRoutingHelper list;
   list.Add (olsr, 10);
 
-  // Konfigurisemo internet stack
+  // Internt stack configuration
   InternetStackHelper internet;
   internet.SetRoutingHelper (list);
   internet.Install (c);
 
-  // Pridruzujemo IP adrese
+  // Search for IP addresses
   Ipv4AddressHelper ipv4;
   NS_LOG_INFO ("Assign IP Addresses.");
   ipv4.SetBase ("10.1.1.0", "255.255.255.0");
@@ -146,19 +145,19 @@ int main (int argc, char *argv[])
 
   NS_LOG_INFO ("Create Applications.");
 
-  // UDP konekcija od N0 do N1
+  // UDP connection from N0 to N1
 
   uint16_t sinkPort = 6;
-  Address sinkAddress (InetSocketAddress (ifcont.GetAddress (1), sinkPort)); // interfejs n1
+  Address sinkAddress (InetSocketAddress (ifcont.GetAddress (1), sinkPort)); // interface n1
   PacketSinkHelper packetSinkHelper ("ns3::UdpSocketFactory", InetSocketAddress (Ipv4Address::GetAny (), sinkPort));
   ApplicationContainer sinkApps = packetSinkHelper.Install (c.Get (1)); //n1 sink
   sinkApps.Start (Seconds (0.));
   sinkApps.Stop (Seconds (25.));
   
 
-  Ptr<Socket> ns3UdpSocket = Socket::CreateSocket (c.Get (0), UdpSocketFactory::GetTypeId ()); //Izvorisni cvor postavljen na n0
+  Ptr<Socket> ns3UdpSocket = Socket::CreateSocket (c.Get (0), UdpSocketFactory::GetTypeId ()); //n0 set as source node
 
-  // Kreiramo UDP na n0
+  // Create UDP on n0 node
   Ptr<MyApp> app = CreateObject<MyApp> ();
   app->Setup (ns3UdpSocket, sinkAddress, 1040, 100000, DataRate ("250Kbps"));
   c.Get (0)->AddApplication (app);
@@ -168,25 +167,25 @@ int main (int argc, char *argv[])
 
 
 
-// Postavljamo Mobility za sve cvorove
+// Set Mobility for all nodes
 
   MobilityHelper mobility;
   Ptr<ListPositionAllocator> positionAlloc = CreateObject <ListPositionAllocator>();
   positionAlloc ->Add(Vector(100, 200, 0)); // cvor0
-  positionAlloc ->Add(Vector(500,200, 0)); // cvor1 -- pocinje na udaljenoj lokaciji
+  positionAlloc ->Add(Vector(500,200, 0)); // cvor1 -- start from remote location
   positionAlloc ->Add(Vector(200, 400, 0)); // cvor2
   positionAlloc ->Add(Vector(400, 400, 0)); // cvor3
   mobility.SetPositionAllocator(positionAlloc);
   mobility.SetMobilityModel("ns3::ConstantPositionMobilityModel");
   mobility.Install(c);
 
-  // trenutak u kojem cvor1 ulazi u opseg signala cvora 0
+  // Set time when node 1 is in node 0 range	
   Simulator::Schedule (Seconds (5.0), &SetPosition, c.Get (1), 200.0);
 
-  // trenutak u kojem prestaje komunikacija izmedju cvora 0 i cvora 1
+  // Set time when node 1 and 0 stop communication
   Simulator::Schedule (Seconds (15.0), &SetPosition, c.Get (1), 500.0);
 
-  // Pratimo primljene pakete
+  // Trace recieved packages
   Config::ConnectWithoutContext("/NodeList/*/ApplicationList/*/$ns3::PacketSink/Rx", MakeCallback (&ReceivePacket));
 
 // Trace devices (pcap)
@@ -205,10 +204,10 @@ int main (int argc, char *argv[])
 // 
 //
   
-// Kreiranje datoteke za spremanje rezultata za animaciju:
+// Create file to store simulation data:
   AnimationInterface anim ("ProjekatOBSS.xml");
   
-// Postavljanje pozicija cvorova za NetAnim:
+// Set node positions for NetAnim:
   //anim.SetConstantPosition (c.Get(0) ,100.0, 200.0);
   //anim.SetConstantPosition (c.Get(1), 500.0, 200.0);
   //anim.SetConstantPosition (c.Get(2), 200.0, 400.0);
